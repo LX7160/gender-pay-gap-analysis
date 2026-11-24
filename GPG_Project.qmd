@@ -1,0 +1,933 @@
+---
+title: "Gender Pay Gap by Education and Race - Lillian Xue (October 1st,  2026)"
+format: pdf
+editor: visual
+output: 
+  pdf_document:
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{microtype}
+  - \usepackage{url}
+  - \Urlmuskip=0mu plus 1mu
+---
+
+# Section 1: Observations and EDA
+
+### 1) Introduction
+
+Income inequality has always been an important issue that causes economic and social concerns in the United States. Although it is often considered associated with education levels, this issue also exists across genders and races. This project focuses on the median annual earnings among full-time workers using data from the U.S. Census Bureau Current Population Survey (CPS ASEC), which contains data on median earnings for females and males across various education levels and racial groups. Data from 2020 to 2024 are examined in this project. We choose to examine the median earnings instead of the mean earnings because it is less affected by extreme values and outliers and can provide a better overview of the general income within a group. The main purpose of this project is to study whether education level, gender, and race are associated with differences in earnings of the U.S. population. Four questions are explored through hypothesis testing: 1. Are median earnings different between females and males? 2. Do male and female earnings have equal variance/spread? 3. Does education level relate to the difference in average earnings? 4. Does the pay gap ratio vary by race? The trend of earnings ratios from 2020 to 2024 is also explored through plots. T-test, F-test, ANOVA tests, and Tukey’s test were conducted for comparison. From these techniques, the goal of the project is to show a clear understanding of the relationships among earnings, gender, education level, and race in the U.S.
+
+### 2) Data and Statistics
+
+```{r}
+## Data Package Import ## 
+library(ggplot2) 
+library(dplyr)
+library(tidyr)
+library(car)
+```
+
+```{r}
+## Education Levels Data ## 
+education_levels <- c(
+  'Less than\n9th grade',
+  '9th-12th\n(nongrad)',
+  'High school\n(graduated)', 
+  'Some college\n(no degree)', 
+  'Associate\ndegree',
+  "Bachelor's\ndegree", 
+  "Master's\ndegree", 
+  'Professional\ndegree', 
+  'Doctorate\ndegree'
+  )
+education_labels <- c(
+  'Less than 9th grade',
+  '9th-12th (no diploma)', 
+  'High school graduate', 
+  'Some college (no degree)', 
+  'Associate degree',
+  "Bachelor's degree", 
+  "Master's degree", 
+  'Professional degree', 
+  'Doctorate degree'
+  )
+edu_labels <- c( 
+  'Total',
+  '<9th',
+  '9th-12th', 
+  'HS Grad',
+  'Some College', 
+  'Associate', 
+  "Bachelor's+", 
+  "Bachelor's", 
+  "Master's", 
+  'Professional', 
+  'Doctorate'
+  )
+edu_short <- c('Total', '<9th', '9-12th', 'HS', 'SomeCol', 'Assoc', 'Bach+',
+               'Bach', 'Master', 'Prof', 'Doc')
+```
+
+```{r}
+## Median Earnings Data ## 
+male_median <- c(
+  40910, 42440, 52020, 61450, 70000, 
+  92090, 121900, 151100, 141900
+  )
+female_median <- c(
+  32080, 33870, 41070, 47300, 51170, 
+  70930, 83410, 131900, 104500
+  )
+```
+
+```{r}
+## Education df ## 
+education_df <- data.frame(
+  education = factor( rep(education_levels, 2), 
+                      levels = education_levels
+                      ),
+  sex = rep(
+    c('Female', 'Male'),
+    each = length(education_levels) 
+    ),
+  median_earnings = c( 
+    female_median, 
+    male_median
+    )
+  )
+
+## Descriptive Statistics ## 
+des_stats <- education_df %>%
+  group_by(sex) %>% 
+  summarise(
+    Mean = mean(median_earnings),
+    Median = median(median_earnings),
+    SD = sd(median_earnings),
+    Min = min(median_earnings),
+    Max = max(median_earnings)
+    )
+des_stats
+```
+
+```{r}
+## Pay Gap df ##
+paygap_education_df <- data.frame( 
+  education = education_levels, 
+  female = female_median,
+  male = male_median,
+  gap_dollars = male_median - female_median, 
+  gap_percent = round(
+    (male_median - female_median) / 
+      male_median * 100, 1)
+  )
+paygap_education_df
+```
+
+```{r}
+## Education Pay Gap Data ## 
+years <- 2020:2024
+ratios <- list(
+  'Less than\n9th grade' = c(0.618,0.663,0.696,0.722,0.699),
+  '9th-12th\n(nongrad)' = c(0.627,0.608,0.654,0.666,0.675),
+  'High school\n(graduated)' = c(0.669,0.723,0.748,0.721,0.695), 
+  'Some college\n(no degree)' = c(0.667,0.681,0.673,0.647,0.700), 
+  'Associate\ndegree' = c(0.692,0.717,0.718,0.702,0.682),
+  "Bachelor's\ndegree" = c(0.714,0.696,0.710,0.709,0.743), 
+  "Master's\ndegree" = c(0.686,0.724,0.717,0.722,0.688), 
+  'Professional\ndegree' = c(0.733,0.789,0.772,0.701,0.814), 
+  'Doctorate\ndegree' = c(0.701,0.742,0.862,0.831,0.812)
+  )
+ratios
+```
+
+```{r}
+## Education Trend df ## 
+education_trend_df <- do.call(
+  rbind,
+  lapply(names(ratios), function(edu) {
+    data.frame(
+      year = years, 
+      education = edu,
+      ratio = ratios[[edu]]
+      )
+    })
+  )
+education_trend_df$education <- 
+  factor(
+    education_trend_df$education, 
+    levels = education_levels
+    )
+education_trend_df
+```
+
+```{r}
+## Race Data ## 
+raw <- list(
+  `2024` = list( 
+    male = list(
+      white = c(61140,36950,34290,48320,51290,63170,92780,83260,110100,
+                136500,120800),
+      black = c(47830,50750,30460,39920,42640,50420,75630,69760,90740,
+                76140,132400),
+      asian = c(80470,31600,37560,44460,40440,61290,110600,90340,130100,
+                168800,150700),
+      hispanic = c(45390,36400,36040,41140,46190,54440,71330,66090,85580,
+                   61610,110400)
+      ),
+    female = list(
+      white = c(45930,25910,21950,32350,35120,42200,67140,61090,75160,
+                102500,97560),
+      black = c(42350,23380,25070,31680,35450,41340,62170,55740,75470,
+                112100,95290),
+      asian = c(57240,28370,25200,35070,30990,40760,81160,66050,98060,
+                151400,102300),
+      hispanic = c(36440,26090,25640,31230,32100,40090,60730,55620,73220,
+                   50230,90330)
+      )
+    ),
+  `2023` = list( 
+    male = list(
+      white = c(59650,33960,32150,46110,50640,61140,91630,83850,101500,
+                141100,121300),
+      black = c(49410,30960,25290,40070,46650,51560,71670,65360,86460,
+                NA,116200),
+      asian = c(75500,30220,35980,41710,40850,52200,102100,85190,122100,
+                173800,140100),
+      hispanic = c(41550,32050,32220,38640,41270,51450,70700,63650,86710,
+                   75720,111900)
+      ),
+    female = list(
+      white = c(43200,22340,21340,32070,31790,41570,65180,57380,72020,
+                100400,100800),
+      black = c(40950,25900,21950,31430,32380,40860,61950,55910,72230,
+                81910,92470),
+      asian = c(52450,26970,17360,35070,35700,38010,76340,62360,90900,
+                131400,111400),
+      hispanic = c(33180,22710,23790,30830,31130,37210,55680,50880,71770,
+                   52080,80210)
+      )
+    ),
+  `2022` = list(
+    male = list(
+      white = c(55920,31550,31500,42480,50180,57370,87080,80670,96220,
+                126500,112300),
+      black = c(45820,30390,30990,36920,40210,51020,70450,62050,77470,
+                NA,100500),
+      asian = c(72350,34020,35120,40860,40270,49860,100600,81260,122300,
+                131300,122200),
+      hispanic = c(40980,31120,32040,37760,41970,48020,67730,61970,81050,
+                   75600,121200)
+      ),
+    female = list(
+      white = c(41640,21670,20030,31100,31470,39980,61570,55220,71100,
+                96850,97080),
+      black = c(40740,23620,23510,31740,31940,40740,61350,55260,68720,
+                95710,90180),
+      asian = c(55140,32070,20600,30540,28340,45080,73500,61680,86630,
+                136700,106900),
+      hispanic = c(31820,21350,21540,29580,30810,35390,51270,46440,65040,
+                   72490,110300)
+      )
+    ),
+  `2021` = list( 
+    male = list(
+      white = c(51944,31848,30801,41515,46022,52769,82641,76740,91891,
+                125808,121939),
+      black = c(41082,27368,23713,34827,37476,45347,61078,52548,70600,
+                116570,91798),
+      asian = c(70013,26554,27126,36830,41439,48915,100238,79342,115604,
+                113004,131944),
+      hispanic = c(40219,31458,31089,37115,39932,47146,61525,56817,81368,
+                   77103,112413)
+      ),
+    female = list(
+      white = c(40360,20874,17971,29936,30507,37984,60013,51740,66191,
+                96033,88613),
+      black = c(36631,NA,20168,27586,30996,35234,57538,51218,65089,
+                85305,96897),
+      asian = c(50077,19259,20796,31133,21967,33828,70385,58295,86046,
+                111109,91970),
+      hispanic = c(30720,20897,20464,26710,28353,34073,50966,44336,65210,
+                   64992,86624)
+      ) 
+    ),
+  `2020` = list( 
+    male = list(
+      white = c(54448,30522,31524,41783,50590,55606,80492,73382,90075,
+                127864,121788),
+      black = c(41510,24723,25967,33607,40078,43477,62427,58446,71923,
+                110561,81369),
+      asian = c(70840,30103,30006,36453,40429,47234,93952,75123,110727,
+                130785,132893),
+      hispanic = c(38748,29515,30367,35820,42074,47054,60177,52079,75740,
+                   136252,77415)
+      ),
+      female = list(
+        white = c(40693,19507,19821,28127,32234,36772,57012,51144,62076,
+                  90272,81973),
+        black = c(35699,21443,16952,25368,30652,32287,54363,50117,61548,
+                  97099,115462),
+        asian = c(50917,14573,22431,26416,27006,34440,67933,59964,77395,
+                  125591,90014),
+        hispanic = c(30540,18636,20239,25966,31445,32141,50180,43579,60056,
+                     71574,89334)
+        )
+      )
+    )
+
+## Race labels ## 
+races <- c(
+  'white', 
+  'black', 
+  'asian', 
+  'hispanic'
+  )
+sexes <- c( 
+  'male', 
+  'female'
+  )
+yr_chars <- as.character(2020:2024)
+raw
+yr_chars
+```
+
+```{r}
+## Earnings Summary df ## 
+rows <- list()
+for (yr in yr_chars) {
+  yr_data <- raw[[yr]]
+  for (sx in sexes) {
+    sx_data <- yr_data[[sx]] 
+    for (rc in races) {
+      vals <- sx_data[[rc]]
+      for (ei in seq_along(edu_labels)) { 
+        rows[[length(rows) + 1]] <- data.frame(
+          year = as.integer(yr), 
+          race = rc,
+          sex = sx,
+          edu = edu_labels[ei],
+          edu_s = edu_short[ei],
+          edu_i = ei,
+          earn = vals[ei]
+        )
+      }
+    }
+  }
+}
+earnings_df <- bind_rows(rows)
+earnings_df
+```
+
+```{r}
+## Race Pay Gap df ##
+paygap_race_df <- earnings_df %>% 
+  pivot_wider(
+    names_from = sex, 
+    values_from = earn
+    ) %>% 
+  mutate(
+    ratio = female / male 
+    )
+## Total Earnings ##
+paygap_total <- paygap_race_df %>% 
+  filter(
+    edu == 'Total'
+    )
+## Race Data Summary ##
+race_summary <- paygap_total %>% 
+  group_by(race) %>%
+  summarise(
+    Mean_Ratio = mean(ratio), 
+    SD_Ratio = sd(ratio), 
+    Min_Ratio = min(ratio), 
+    Max_Ratio = max(ratio)
+    )
+race_summary
+```
+
+### 3) Visualizations
+
+#### Plot 1.1: Median Earnings by Education Level and Sex (2024)
+
+```{r}
+p1_1 <- ggplot(
+  education_df, 
+  aes(
+    x = education,
+    y = median_earnings / 1000, 
+    fill = sex
+    )
+  )+
+  geom_bar(
+    stat = 'identity', 
+    position = 'dodge', 
+    width = 0.5
+    )+
+  scale_fill_manual(
+    values = c(
+      Female = '#CDAF95', 
+      Male = '#9BCD9B'
+      ) 
+    )+ 
+  labs(
+    title = 'Plot 1.1 Median Earnings by Education Level and Sex (2024)', 
+    subtitle = '18 Years and Older Full-Time Workers, All Races',
+    x = 'Education Level',
+    y = 'Median Earnings ($ Thousands)', 
+    fill = 'Sex',
+    caption = 'Data source: Census Bureau CPS ASEC 2025' 
+    )+
+  theme_minimal(base_size = 10) + 
+  theme(
+    plot.title = element_text(face = 'bold'), 
+    axis.text.x = element_text(size = 6), 
+    legend.position = 'top'
+    )
+p1_1
+```
+
+**Observation:**
+
+The median earnings in 2024 increase with the increase in education level. For all levels of education, males gain more income than females, with the gender pay gap as the widest among those having master’s and doctoral degrees.
+
+#### Plot 1.2: Gender Pay Gap Percentage by Education Level (2024)
+
+```{r}
+p1_2 <- ggplot( 
+  paygap_education_df, 
+  aes(
+    x = factor( 
+      education,
+      levels = education_levels 
+      ),
+    y = gap_percent 
+    )
+  ) +
+  geom_bar(
+    stat = 'identity', 
+    fill = '#BCD2EE', 
+    width = 0.7
+    ) + 
+  labs(
+    title = 'Plot 1.2 Gender Pay Gap Percentage by Education Level (2024)', 
+    subtitle = 'Gap = (Male - Female) / Male × 100',
+    x = 'Education Level', 
+    y = 'Pay Gap (%)',
+    caption = 'Data source: Census Bureau CPS ASEC 2025' 
+    ) +
+  theme_minimal(base_size = 10) + 
+  theme(
+    plot.title = element_text(face = 'bold'), 
+    axis.text.x = element_text(size = 6)
+    ) 
+p1_2
+```
+
+**Observation:**
+
+For 2024, the pay gap ratios are approximately at 20% for lower education levels (less than 9th grade, 9th-12th non-grad, high school graduated, and some college). Among higher education levels, associate degree, master’s degree, and doctorate show a higher pay gap, with the master’s degree the highest (\~30%). Professional degree presents the lowest pay gap among all levels of education (\~12.5%).
+
+\newpage
+
+#### Plot 1.3: Earnings Trend Across Education Levels (2024)
+
+```{r}
+p1_3 <- ggplot( 
+  education_df, 
+  aes(
+    x = education,
+    y = median_earnings / 1000, 
+    color = sex,
+    group = sex 
+    )
+  )+
+  geom_line(linewidth = 1) + 
+  geom_point(size = 2) + 
+  scale_color_manual(
+    values = c(
+      Female = '#CDAF95', 
+      Male = '#9BCD9B'
+      ) 
+    )+ 
+  labs(
+    title = 'Median Earnings Trend by Education Level and Sex (2024)', 
+    subtitle = '18 Years and Older Full-Time Workers, All Races',
+    x = 'Education Level',
+    y = 'Median Earnings ($ Thousands)', 
+    color = 'Sex',
+    caption = 'Data source: Census Bureau CPS ASEC 2025' 
+    )+
+  theme_minimal(base_size = 10) + 
+  theme(
+    plot.title = element_text(face = 'bold'), 
+    axis.text.x = element_text(size = 6), 
+    legend.position = 'top'
+    )
+p1_3
+```
+
+**Observation:**
+
+The plot shows that in 2024, median incomes across all educational levels, from those with less than 9th grade education to those with professional degrees, are on an upward trend. There is a decrease in median earnings for the doctorate degree. Males earned more than females for all education levels, and the gender pay gap tends to increase with the increase in education level, with the largest gap for the master’s degree and the doctorate degree.
+
+#### Plot 1.4: Education Level Pay Gap Trends (2020–2024)
+
+```{r}
+p1_4 <- ggplot( 
+  education_trend_df, 
+  aes(
+    x = year,
+    y = ratio,
+    color = education,
+    group = education
+    )
+  )+
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.5) +
+  geom_hline( 
+    yintercept = 1, 
+    linetype = 'dashed', 
+    color = 'gray'
+    )+
+  annotate(
+    'text',
+    x = 2020.05, 
+    y = 1.01,
+    label = 'Equal Pay', 
+    color = 'gray', 
+    size = 3
+    )+
+  scale_x_continuous(
+    breaks = 2020:2024 
+    )+
+  scale_y_continuous(
+    limits = c(0.58, 1.05),
+    labels = scales::percent_format( 
+      accuracy = 1
+      ) 
+    )+
+  labs(
+    title = 'Gender Pay Gap Ratio by Education Level (2020-2024)', 
+    subtitle = 'Female / Male Median Earnings',
+    x = 'Year',
+    y = 'Female-to-Male Earnings Ratio', 
+    color = 'Education Level',
+    caption = 'Data source: Census Bureau CPS ASEC 2025' 
+    )+
+  theme_minimal(base_size = 10) + 
+  theme(
+    plot.title = element_text(face = 'bold'), 
+    legend.position = 'right',
+    legend.text = element_text(size = 7) 
+    )
+p1_4
+```
+
+**Observation:**
+
+This chart shows the gender pay gap ratio by educational level from 2020 to 2024. Although there are jumps in between, the ratio shows an upward trend as the years get closer to the present (from 60%-75% to 65%-85%). Doctorate degree holds the largest increase in the gender pay gap ratio (from \~70% to \~80%).
+
+#### Plot 2.1: Female to Male Earnings Ratio by Race (2020–2024)
+
+```{r}
+race_cols <- c(
+  white = '#CDC8B1', 
+  black = '#CD96CD', 
+  asian = '#EE9572', 
+  hispanic = '#6959CD'
+)
+p2_1 <- ggplot( 
+  paygap_total, 
+  aes(
+    x = year, 
+    y = ratio, 
+    color = race, 
+    group = race
+    )
+  )+
+  geom_line(linewidth = 1.1) + 
+  geom_point(size = 2.8) + 
+  scale_color_manual(
+    values = race_cols, 
+    labels = c(
+      white = 'White', 
+      black = 'Black', 
+      asian = 'Asian', 
+      hispanic = 'Hispanic'
+      )
+    )+
+  scale_y_continuous(
+    labels = scales::percent_format( 
+      accuracy = 1
+      ),
+    limits = c(0.65, 0.95) 
+    )+
+  scale_x_continuous(
+    breaks = 2020:2024 
+    )+
+  labs(
+    title = 'Female-to-Male Earnings Ratio by Race (2020-2024)', 
+    subtitle = 'All Education Levels, Full-Time Workers',
+    x = NULL,
+    y = 'Pay Gap Ratio (F/M)', 
+    color = 'Race',
+    caption =
+      '2020 data uses workers aged 25+; 2021-2024 uses workers aged 18+.' 
+    )+
+  theme_minimal(base_size = 12) + 
+  theme(
+    legend.position = 'right',
+    plot.title = element_text(face = 'bold') 
+    )
+
+p2_1
+```
+
+**Observation:**
+
+From 2020 to 2024, the pay gap ratio tends to increase for Black, White, and Hispanic populations, while the Asian population tends to have a slight decrease. The plot shows that trends in the gender pay gap ratio vary across different racial groups.
+
+# Section 2: Testing of Hypotheses
+
+### Question #1: Are median earnings different between females and males?
+
+```{r}
+cat('Test #1: T-Test\n\n')
+cat('H0: Mean male earnings equal to Mean female earnings\n')
+cat('Ha: Mean male earnings are not equal to Mean female earnings\n\n')
+t_result <- t.test( 
+  male_median, 
+  female_median, 
+  var.equal = TRUE
+)
+print(t_result)
+
+if(t_result$p.value < 0.05){ 
+  cat('\nReject H0\n')
+  cat('Conclusion: There is statistically significant evidence 
+      that male and female earnings differ.\n')
+} else {
+  cat('\nFail to Reject H0\n')
+  cat('Conclusion: There is not enough statistical evidence to conclude 
+  that male and female earnings differ from each other.\n')
+}
+```
+
+**Analysis:**
+
+A T-test is conducted to test this hypothesis at a significance level of alpha = 0.05. From the result, the p-value is 0.2974, which is larger than 0.05. The 95% confidence interval constructed from the test includes \$0, meaning that we cannot exclude the possibility that the difference between male and female earnings is zero. Thus, we fail to reject the null hypothesis, and there is no statistically significant difference between male and female earnings. The significance is strongly affected by the small sample size, which includes only 9 education levels. As a result, although there is a higher sample mean of male earnings (\$85978.89) than that of females (\$66247.78), this difference is not statistically significant.
+
+### Question #2: Do male and female earnings have equal variance (spread)?
+
+```{r}
+cat('\n\nTest #2: F-Test\n\n')
+cat('H0: Variance of Male Earnings = Variance of Female Earnings\n')
+cat('Ha: Variances are different\n\n')
+cat(
+  'Male variance:', 
+  round(var(male_median),2), 
+  '\n'
+)
+cat(
+  'Female variance:', 
+  round(var(female_median),2), 
+  '\n\n'
+)
+f_result <- var.test( 
+  male_median,
+  female_median 
+)
+print(f_result)
+
+if(f_result$p.value < 0.05){ 
+  cat('\nReject H0\n')
+  cat('Conclusion: Earnings variability differs between males and females.\n') 
+} else {
+  cat('\nFail to Reject H0\n')
+  cat('Conclusion: There is not enough statistical evidence to conclude that 
+the variances differ from each other.\n')
+}
+```
+
+**Analysis:**
+
+An F-test is conducted to test this hypothesis at the significance level of alpha = 0.05. The variance of earnings for females and males is calculated from the median earnings. The p-value is 0.5577, which is larger than 0.05. Thus, we fail to reject the null hypothesis, and there is no statistically significant difference between the variance of male earnings and that of female earnings. Since the f-value approaches 1 (f = 1.5361), this also indicates that the two variances have a similar spread.
+
+### Question #3: Does education level relate to the difference in average earnings?
+
+```{r}
+cat('\n\nTest #3: ANOVA for Education\n\n')
+cat('H0: All education levels have the same mean earnings\n')
+cat('Ha: At least one education level has a different mean earnings\n\n')
+all_earnings <- c( 
+  female_median, 
+  male_median
+)
+all_education <- c( 
+  education_labels, 
+  education_labels
+)
+anova_result <- aov(
+  all_earnings ~ all_education 
+)
+anova_summary <- summary(anova_result) 
+print(anova_summary)
+
+p_anova <- anova_summary[[1]][['Pr(>F)']][1] 
+cat('\np-value =', p_anova, '\n\n')
+
+if(p_anova < 0.05){ 
+  cat('Reject H0\n')
+  cat('Conclusion: Education level affects earnings.\n') 
+} else {
+  cat('Fail to Reject H0\n')
+  cat('Conclusion: There is no statistically significant earnings 
+      differences across education levels.\n')
+}
+
+## Tukey's Test ##
+cat("\n\nTukey's Test for Education\n\n")
+tukey_result <- TukeyHSD(anova_result) 
+tukey_table <- as.data.frame(
+  tukey_result$all_education 
+)
+education_tukey_output <- data.frame(
+  Pair = rownames(tukey_table),
+  Difference = round(tukey_table$diff,0), 
+  p_adjusted = round(tukey_table$`p adj`,4), 
+  Significant =
+    ifelse(
+      tukey_table$`p adj` < 0.05, 
+      'Yes',
+      'No'
+      )
+  )
+knitr::kable(
+  education_tukey_output,
+  caption = "Tukey's Test Comparisons" 
+)
+
+```
+
+**Analysis:**
+
+To test this hypothesis, an ANOVA test and a Tukey’s test are conducted at a significance level of alpha = 0.05. The p-value for this test is 0.0006136964, which is smaller than 0.05. Therefore, the null hypothesis is rejected, and there is statistically significant evidence to conclude that there is a difference between education levels and median earnings. Tukey’s test is conducted to show which pairs of education levels have a statistically significant difference in median earnings. From the result, ten education pairs show statistically significant differences, which can be divided into three major groups: doctorate and lower education levels (including less than 9th grade, 9th-12th grade, high school graduate, and some college), professional degree and lower/middle education levels (including less than 9th grade, 9th-12th grade, high school graduates, associate degrees, and some college), and master’s degree and low education levels (including less than 9th grade and 9th-12th grade). These results indicate that advanced degrees (doctorate and professional degrees) show the biggest earnings gap. There is no statistically significant earnings difference between doctorate, professional, and master’s degrees when compared to each other, and this is also true between doctorates and bachelor’s degrees. There are also no statistically significant differences in earnings between lower education levels, including less than 9th grade, high school graduate, associate degree, and college.
+
+### Question #4: Does the pay gap ratio vary by race?
+
+```{r}
+cat('\n\nTest #4: ANOVA for Race\n\n')
+cat('H0: The pay gap ratio is the same across races\n')
+cat('Ha: At least one racial group has a different pay-gap ratio\n\n')
+race_summary <- paygap_total %>% 
+  group_by(race) %>%
+  summarise(
+ Mean_Ratio = mean(ratio) 
+  )
+print(race_summary)
+race_anova <- aov( 
+  ratio ~ race,
+  data = paygap_total 
+)
+race_anova_summary <- summary(
+  race_anova 
+)
+print(race_anova_summary)
+p_race <- race_anova_summary[[1]][['Pr(>F)']][1] 
+cat('\np-value =', p_race, '\n\n')
+
+if(p_race < 0.05){ 
+  cat('Reject H0\n')
+  cat('Conclusion: Race affects the female to male earnings ratio.\n') 
+} else {
+  cat('Fail to Reject H0\n')
+  cat('Conclusion: There is no statistically significant 
+racial differences.\n')
+}
+
+## Tukey's Test ##
+cat("\n\nTukey's Test for Race\n\n")
+race_tukey <- TukeyHSD(
+  race_anova 
+)
+race_table <- as.data.frame( 
+  race_tukey$race
+)
+race_output <- data.frame(
+  Pair = rownames(race_table),
+  Difference = round(race_table$diff,4), 
+  p_adjusted = round(race_table$`p adj`,4), 
+  Significant =
+    ifelse(
+      race_table$`p adj` < 0.05, 
+      'Yes',
+      'No'
+      )
+  )
+print(
+  race_output, 
+  row.names = FALSE
+)
+```
+
+**Analysis:**
+
+For this hypothesis, the mean female-to-male pay gap ratio from 2020 to 2024 is calculated for each race and compared across races, and an ANOVA and a Tukey’s test are conducted at a significance level of alpha = 0.05. The p-value for the ANOVA test is 6.25701e-08, which is essentially smaller than 0.05. As a result, the null hypothesis is rejected, and there is statistically significant evidence to conclude that at least one racial group has a different pay gap ratio than others. A Tukey’s test is conducted to show which pairs of racial groups have a statistically significant difference in pay-gap ratios. The result of the test shows there is statistically significant difference between Black and Asian workers (adjusted p\<0.001), Hispanic and Asian workers (adjusted p=0.0013), Hispanic and Black workers (adjusted p=0.0001), and White and Black workers (adjusted p\<0.001). These findings indicate that Black workers generally have a higher gender pay gap ratio than White and Asian workers, and White workers generally have the lowest gender pay gap ratio. Since the adjusted p-value for the pay gap difference of White and Asian and that of White and Hispanic are 0.2170 and 0.0745, respectively, those differences are not statistically significant, meaning that the mean pay-gap ratios for those groups from 2020 to 2024 are similar.
+
+# Section 3: Regression Analysis
+
+### **1) Regression Model**
+
+A multiple linear regression model was constructed to examine the relationship among sex, education level, race, and year with the median earnings data from 2020 to 2024. "Total" and "Bachelor's+" are excluded from the regression data set since they represent combined education level groups instead of individual levels. Empty observations in the original data set were also removed.
+
+The regression model is fitted as $$E(Y|X)=\beta_0+\beta_1x_1+\beta_2x_2+\beta_3x_3+\beta_4x_4$$where the response variable (Y) is the median annual earnings. Year ($x_1$) is a numerical predictors; sex ($x_2$), education level ($x_3$), race ($x_4$) are categorical predictors. Reference groups are female for sex, less than 9th grade for education, and White for race, thus $\beta_1$, $\beta_2$, and $\beta_3$ represent the difference between the reference groups and other groups holding other predictors fix.
+
+```{r}
+## Regression df ##
+unique(earnings_df$edu)
+reg_df <- earnings_df %>%
+  filter(
+    edu != 'Total',
+    edu != "Bachelor's+",
+    ) %>%
+  filter(!is.na(earn))
+
+reg_df$sex <- factor(reg_df$sex, levels = c('female', 'male'))
+reg_df$race <- factor(reg_df$race, levels = c('white', 'black', 'hispanic', 
+                                              'asian'))
+reg_df$edu <- factor(
+  reg_df$edu, 
+  levels = c(
+    '<9th', 
+    '9th-12th',
+    'HS Grad',
+    'Some College',
+    'Associate',
+    "Bachelor's",
+    "Master's",
+    'Professional',
+    'Doctorate'
+  )
+)
+
+reg_df
+```
+
+### 2) Main Model
+
+```{r}
+reg_model1 <- lm(earn ~ sex + edu + race + year, data = reg_df)
+summary(reg_model1)
+```
+
+**Analysis:**
+
+The multiple linear regression model presents F(13, 343) = 231.5 with a p-value \< 0.001, indicating that the model is statistically significant. $R^2$ = 0.8977 and adjusted $R^2$ = 0.8939 shows that approximately 89.77% of the observed variation in median earnings is explained by the fitted linear relationship. From the estimate coefficients shown in the output, the following explanations can be made: Male is associated with \$14931.5 higher median earnings than female. All education levels, except for 9th-12th, have significantly higher estimated median earnings than the reference group of less than 9th grade. Black and Hispanic median earnings (\$6108, \$9353) are estimated to be lower than White median earnings, and Asian median earnings (\$5442) are estimated to be higher than White median earnings. And an additional year is associated with an estimated \$2044.2 increase in median earnings.
+
+### 3) Interaction Models
+
+Plots 1.1-1.4 suggest that gender pay gap is not constant across education levels or racial groups. Thus, interaction relationships are added to the regression model to examine whether the relationship between sex and median earnings varies across education level or racial groups.
+
+```{r}
+## Education level Interaction Model ##
+reg_edu_int <- lm(earn ~ sex * edu + race + year,
+                            data = reg_df)
+
+anova(reg_model1, reg_edu_int)
+```
+
+The null hypothesis of this ANOVA test is $$H_0: \beta_{\text{sex:edu},1} = \beta_{\text{sex:edu},2} = \cdots = \beta_{\text{sex:edu},8} = 0$$, and the alternative hypothesis is at least one sex x education coefficient $\ne$ 0. Since the p-value = 0.03391 \< 0.05, $H_0$ is rejected, and there is statistically significant evidence that the gender pay gap varies across education level.
+
+```{r}
+## Race Interaction Model ##
+reg_race_int <- lm(earn ~ sex * race + edu + year, 
+                   data = reg_df)
+anova(reg_model1, reg_race_int)
+```
+
+The null hypothesis of this ANOVA test is $$H_0: \beta_{\text{sex:race},1} = \beta_{\text{sex:race},2} = \beta_{\text{sex:race},3} = 0$$, and the alternative hypothesis is that at least one sex x race coefficient $\ne$ 0. Since the p-value = 0.002279 \< 0.05, $H_0$ is rejected, and there is statistically significant evidence that the gender pay gap is different among racial groups.
+
+### 4) Regression Plots
+
+#### Plot 3.1.1: Residual vs. Fitted Earnings for Education Level Interaction Model
+
+```{r}
+## Residual and fitted values ##
+residualPlot(reg_edu_int, type = 'rstudent', 
+             main = 'Residual vs. Fitted Earnings: Education Interaction',
+             col = '#68838B',
+             col.quad = '#8B3626')
+```
+
+#### Plot 3.1.2: Residual vs. Fitted Earnings for Race Interaction Model
+
+```{r}
+residualPlot(reg_race_int, type = 'rstudent',
+             main = 'Residual vs. Fitted Earnings: Race Interaction',
+             col = '#4A708B',
+             col.quad = '#8B3626')
+```
+
+\newpage
+
+**Observation:**
+
+Both residuals vs. fitted values plots show that residuals are distributed around zero, but the spread appears to increase as the fitted earnings increase. This indicates a possibility of non-constant error variance, and the variability of earnings might be larger for observations with higher predicted earnings.
+
+#### Plot 3.2.1: Normal Probability for Education Level Interaction Model
+
+```{r}
+## Normal Probability ##
+qqnorm(rstudent(reg_edu_int), 
+       main = 'Normal Q-Q Plot for Education Level Interaction Model',
+       col = '#8B5F65')
+qqline(rstudent(reg_edu_int))
+```
+
+#### Plot 3.2.2: Normal Probability for Race Interaction Model
+
+```{r}
+qqnorm(rstudent(reg_race_int), 
+       main = 'Normal Q-Q PLot for race Interaction Model',
+       col = '#5D478B')
+qqline(rstudent(reg_race_int))
+```
+
+**Observation**:
+
+Both normal probability plots show that most of the residuals approximately follow a straight line along the reference line, indicating that the residuals is approximately normally distributed. Deviations on the lower and upper tails indicate slight departures from normality for extreme residual values.
+
+#### Plot 3.3: Residuals vs. Year for the Education Interaction Model
+
+```{r}
+## Residuals and Year ##
+plot(reg_df$year, rstudent(reg_edu_int), xlab = 'Year',
+  ylab = 'Studentized Residuals', 
+  main = 'Residuals vs. Year',
+  col = '#2F4F4F')
+abline(h = 0)
+```
+
+**Observation:**
+
+The plot for residuals vs. year shows that the residuals are generally centered and around zero across years, and no trend or pattern is observed over time. This indicates that there is no obvious evidence of a relationship between residuals and year.
+
+# Section 4: Interpretations and Conclusion
+
+By constructing plots and conducting hypothesis tests, the project examines the relationship between earnings, education level, gender, and race using data from CPS ASEC. Several results are found from our analysis.
+
+The ANOVA test and Plot 1.4 show that earnings generally increase as the education level increases. Individuals with a higher education level, such as bachelor’s, master’s, professional, and doctoral degrees, show higher median earnings than those with lower levels of education. This finding shows that a higher education level remains strongly associated with higher median earnings.
+
+Based on the ANOVA test for education, statistically significant differences in earnings were found among education levels. Tukey’s test further identified the education level pairs that have a significant difference in earnings. These test results provide strong evidence of the relationship between high earnings and a high level of education.
+
+From Plot 1.1 and 1.3, we can see that females earned less than males for most education levels. Although, the earlier test does not show statistically significant difference between female and male earnings at the 0.05 significance level, the observed data shows a consistent pattern of a lower female median earnings across most of the education levels. The multiple linear regression analysis provides additional evidence for this pattern after controlling for education level, race, and year. In the main regression model, male is associated with higher median earnings than female workers, holding other predictors constant. This regression model is statistically significant and explained approximately 89.77% of the observed variation in median earnings. The interaction analyses in the regression section provides further information about gender pay gap and education levels, suggesting that there is statistically significant evidence that the gender pay gap varies across education levels.
+
+Racial differences were also observed in the female to male earnings ratios from ANOVA and related Tukey’s test. The test results indicate that there are statistically significant differences in the pay gap ratio and racial groups. Specifically, Black women have the highest earning ratio, while Asian women have the lowest during the years studied. This shows that the gender pay gap is not uniform across different racial groups. The interaction analyses in the regression section support this idea, showing that the gender pay gap is not constant across demographic groups. The sex and race interaction model provides statistically significant evidence that the gender pay gap varies across different racial groups.
+
+To summarize the interaction analyses, they provide statistically significant evidence that the gender pay gap varies across both education levels and racial groups. And it is suggested that education level and race should both be considered as a factor when examining the earning differences between male and female, and gender pay gap should not be treated as a single and constant difference.
+
+The regression plots for residuals show that they are generally centered around zero and follow a normal distribution. However, from the residual against fitted value plots, it is observed that there is a larger spread for larger fitted earnings. This indicates that the assumption of constant variance may not be fully satisfied and higher predicted earnings tend to have more variability. The residual against year plot does not show an obvious trend over time, suggesting that time appears to be unrelated to residuals.
+
+Several limitations should be considered when interpreting these results. First, the overall analysis is based on median earnings instead of data from all individual samples, and this means that individual variations may not be fully examined. Second, data for other years include information on workers aged 18 and older, whereas the 2020 data do not include those aged 18 to 24. Additional information for this age range in 2020 might be needed to improve accuracy. Finally, other factors, such as region, age, occupation, and work experience are not included in the current regression model. Thus, the observed relationships should not be considered as causal affects.
+
+In summary, the results indicate that the level of education is strongly associated with earnings and that the gender pay presents across racial groups. From the interaction analyses, it is also important to note that there is statistically significant evidence that gender apy gap varies across both education levels and racial groups. These findings show the importance of considering multiple factors when studying gender earnings inequality in the United States.
